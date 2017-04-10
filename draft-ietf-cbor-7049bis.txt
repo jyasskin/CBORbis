@@ -583,7 +583,7 @@ Internet-Draft                    CBOR                        April 2017
       F5        -- First value, true
       63        -- Second key, UTF-8 string length 3
          416d74 --   "Amt"
-      21        -- -2
+      21        -- Second value, -2
       FF        -- "break"
 
 2.2.2.  Indefinite-Length Byte Strings and Text Strings
