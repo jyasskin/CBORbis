@@ -852,7 +852,7 @@ BF           -- Start indefinite-length map
 <p id="rfc.section.2.4.2.p.2">For example, the number 18446744073709551616 (2**64) is represented as 0b110_00010 (major type 6, tag 2), followed by 0b010_01001 (major type 2, length 9), followed by 0x010000000000000000 (one byte 0x01 and eight bytes 0x00). In hexadecimal:</p>
 <pre>
 C2                        -- Tag 2
-   29                     -- Byte string of length 9
+   49                     -- Byte string of length 9
       010000000000000000  -- Bytes content
 </pre>
 <h1 id="rfc.section.2.4.3"><a href="#rfc.section.2.4.3">2.4.3.</a> <a href="#fractions" id="fractions">Decimal Fractions and Bigfloats</a></h1>
