@@ -5,7 +5,7 @@
 Network Working Group                                         C. Bormann
 Internet-Draft                                   Universitaet Bremen TZI
 Intended status: Standards Track                              P. Hoffman
-Expires: October 12, 2017                                 VPN Consortium
+Expires: October 12, 2017                                          ICANN
                                                           April 10, 2017
 
 
@@ -3007,9 +3007,9 @@ Authors' Addresses
 
 
    Paul Hoffman
-   VPN Consortium
+   ICANN
 
-   EMail: paul.hoffman@vpnc.org
+   EMail: paul.hoffman@icann.org
 
 
 
