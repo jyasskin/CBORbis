@@ -1314,7 +1314,7 @@ Internet-Draft                    CBOR                        April 2017
    There is an expectation that encoders will use the most compact
    integer representation that can represent a given value.  However, a
    compact application should accept values that use a longer-than-
-   needed encoding (such as encoding "0" as 0b000_11101 followed by two
+   needed encoding (such as encoding "0" as 0b000_11001 followed by two
    bytes of 0x00) as long as the application can decode an integer of
    the given size.
 
