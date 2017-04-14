@@ -339,6 +339,7 @@ address {
 <link href="#rfc.appendix.E.4" rel="Chapter" title="E.4 UBJSON"/>
 <link href="#rfc.appendix.E.5" rel="Chapter" title="E.5 MSDTP: RFC 713"/>
 <link href="#rfc.appendix.E.6" rel="Chapter" title="E.6 Conciseness on the Wire"/>
+<link href="#rfc.appendix.F" rel="Chapter" title="F Changes from RFC 7049"/>
 <link href="#rfc.authors" rel="Chapter"/>
 
 
@@ -347,7 +348,7 @@ address {
 
   <meta name="dct.creator" content="Bormann, C. and P. Hoffman" />
   <meta name="dct.identifier" content="urn:ietf:id:draft-ietf-cbor-7049bis-latest" />
-  <meta name="dct.issued" scheme="ISO8601" content="2017-4-12" />
+  <meta name="dct.issued" scheme="ISO8601" content="2017-4-14" />
   <meta name="dct.abstract" content="The Concise Binary Object Representation (CBOR) is a data format whose design goals include the possibility of extremely small code size, fairly small message size, and extensibility without the need for version negotiation. These design goals make it different from earlier binary serializations such as ASN.1 and MessagePack." />
   <meta name="description" content="The Concise Binary Object Representation (CBOR) is a data format whose design goals include the possibility of extremely small code size, fairly small message size, and extensibility without the need for version negotiation. These design goals make it different from earlier binary serializations such as ASN.1 and MessagePack." />
 
@@ -371,12 +372,12 @@ address {
   <td class="right">P. Hoffman</td>
 </tr>
 <tr>
-  <td class="left">Expires: October 14, 2017</td>
+  <td class="left">Expires: October 16, 2017</td>
   <td class="right">ICANN</td>
 </tr>
 <tr>
   <td class="left"></td>
-  <td class="right">April 12, 2017</td>
+  <td class="right">April 14, 2017</td>
 </tr>
 
     	
@@ -401,7 +402,7 @@ address {
 <p>This Internet-Draft is submitted in full conformance with the provisions of BCP 78 and BCP 79.</p>
 <p>Internet-Drafts are working documents of the Internet Engineering Task Force (IETF).  Note that other groups may also distribute working documents as Internet-Drafts.  The list of current Internet-Drafts is at http://datatracker.ietf.org/drafts/current/.</p>
 <p>Internet-Drafts are draft documents valid for a maximum of six months and may be updated, replaced, or obsoleted by other documents at any time.  It is inappropriate to use Internet-Drafts as reference material or to cite them other than as "work in progress."</p>
-<p>This Internet-Draft will expire on October 14, 2017.</p>
+<p>This Internet-Draft will expire on October 16, 2017.</p>
 <h1 id="rfc.copyrightnotice">
   <a href="#rfc.copyrightnotice">Copyright Notice</a>
 </h1>
@@ -475,7 +476,8 @@ address {
 <li>E.4.   <a href="#rfc.appendix.E.4">UBJSON</a></li>
 <li>E.5.   <a href="#rfc.appendix.E.5">MSDTP: RFC 713</a></li>
 <li>E.6.   <a href="#rfc.appendix.E.6">Conciseness on the Wire</a></li>
-</ul><li><a href="#rfc.authors">Authors' Addresses</a></li>
+</ul><li>Appendix F.   <a href="#rfc.appendix.F">Changes from RFC 7049</a></li>
+<li><a href="#rfc.authors">Authors' Addresses</a></li>
 
 
   </ul>
@@ -2084,6 +2086,17 @@ def decode_half(half):
     </tr>
   </tbody>
 </table>
+<h1 id="rfc.appendix.F"><a href="#rfc.appendix.F">Appendix F.</a> <a href="#changes-from-rfc-7049" id="changes-from-rfc-7049">Changes from RFC 7049</a></h1>
+<p id="rfc.section.F.p.1">The following is a list of known changes from RFC 7049. This list is non-authoritative. It is meant to help reviewers see the significant differences.</p>
+<p/>
+
+<ul>
+  <li>Updated reference for [RFC4267] to <a href="#RFC7159">[RFC7159]</a> in many places</li>
+  <li>Updated reference for [CNN-TERMS] to <a href="#RFC7228">[RFC7228]</a></li>
+  <li>Added a comment to the last example in Section 2.2.1 (added &#8220;Second value&#8221;)</li>
+  <li>Fixed a bug in the example in Section 2.4.2 (&#8220;29&#8221; -&gt; &#8220;49&#8221;)</li>
+  <li>Fixed a bug in the last paragraph of Section 3.6 (&#8220;0b000_11101&#8221; -&gt; &#8220;0b000_11001&#8221;)</li>
+</ul>
 <h1 id="rfc.authors">
   <a href="#rfc.authors">Authors' Addresses</a>
 </h1>
