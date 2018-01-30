@@ -279,6 +279,9 @@ Well-formed:
   and/or data items that are implied by their values as defined in
   CBOR and is not followed by extraneous data.
 
+Ill-formed:
+: The opposite of well-formed.
+
 Valid:
 : A data item that is well-formed and also follows the semantic
   restrictions that apply to CBOR data items.
@@ -385,26 +388,46 @@ floats as integers or vice versa, perhaps to save encoded bytes.
 
 A CBOR data item  ({{cbor-data-models}}) is encoded to or decoded from
 a byte string as described in this section.  The encoding is
-summarized in {{jumptable}}.
+summarized in {{jumptable}}.  An encoder MUST produce only valid
+items.  A decoder MUST NOT naively pass ill-formed items on to its
+application.  It SHOULD report an error and either stop or replace the
+ill-formed item with a specific replacement item.
 
-The initial byte of each data item contains both information about the
-major type (the high-order 3 bits, described in {{majortypes}}) and
-additional information (the low-order 5 bits).  When the value of the
-additional information is less than 24, it is directly used as a small
-unsigned integer.  When it is 24 to 27, the additional bytes for a
-variable-length integer immediately follow; the values 24 to 27 of the
-additional information specify that its length is a 1-, 2-, 4-, or
-8-byte unsigned integer, respectively.  Additional information value
-31 is used for indefinite-length items, described in {{indefinite}}.
-Additional information values 28 to 30 are reserved for future
-expansion.
+The initial byte of each encoded data item contains both information
+about the major type (the high-order 3 bits, described in
+{{majortypes}}) and additional information (the low-order 5 bits).
+For major types except for 7, the additional information's value
+describes how to load an unsigned integer:
 
-In all additional information values, the resulting integer is
-interpreted depending on the major type.  It may represent the actual
-data: for example, in integer types, the resulting integer is used for
-the value itself.  It may instead supply length information: for
-example, in byte strings it gives the length of the byte string data
-that follows.
+Less than 24:
+: The unsigned integer's value is the value of the additional information.
+
+24, 25, 26, or 27:
+: The unsigned integer's value is held in the following 1, 2, 4, or 8,
+  respectively, bytes, in network byte order.
+
+28, 29, 30:
+: These values are reserved for future expansion.  In this version of
+  CBOR, the encoded item is ill-formed.
+
+31:
+: If the major type is 0, 1, or 6, the encoded item is ill-formed.
+  Otherwise, the item's length is indefinite, as described in
+  {{indefinite}}.
+
+The meaning of this unsigned integer depends on the major type.  For
+example, in major type 0, it is the value of the data item as a whole,
+while in byte strings it gives the length of the byte string data that
+follows.
+
+A composite encoded item (major types 2, 3, 4, 5, and 6) contains the
+next 0 or more encoded items, whose number and meanings depend on the
+parent item's type and unsigned integer.
+
+If the encoded byte string ends before the end of an item, that item
+is ill-formed. If the encoded byte string still has bytes remaining
+after the outermost encoded item is parsed, that outer item is
+ill-formed.
 
 A CBOR decoder implementation can be based on a jump table with all
 256 defined values for the initial byte ({{jumptable}}).  A decoder in
@@ -418,79 +441,72 @@ The following lists the major types and the additional information and
 other bytes associated with the type.
 
 Major type 0:
-: an unsigned integer. The 5-bit additional information is either the
-  integer itself (for additional information values 0 through 23) or
-  the length of additional data.  Additional information 24 means the
-  value is represented in an additional uint8_t, 25 means a uint16_t,
-  26 means a uint32_t, and 27 means a uint64_t.  For example, the
+: an integer in the range 0..2**64-1 inclusive.  The value of the
+  encoded item is the unsigned integer itself.  For example, the
   integer 10 is denoted as the one byte 0b000_01010 (major type 0,
   additional information 10).  The integer 500 would be 0b000_11001
   (major type 0, additional information 25) followed by the two bytes
   0x01f4, which is 500 in decimal.
 
 Major type 1:
-: a negative integer. The encoding follows the rules for unsigned
-  integers (major type 0), except that the value is then -1 minus the
-  encoded unsigned integer.  For example, the integer -500 would be
-  0b001_11001 (major type 1, additional information 25) followed by
-  the two bytes 0x01f3, which is 499 in decimal.
+: a negative integer in the range -2**64..-1 inclusive.  The value of
+  the item is -1 minus the unsigned integer.  For example, the integer
+  -500 would be 0b001_11001 (major type 1, additional information 25)
+  followed by the two bytes 0x01f3, which is 499 in decimal.
 
 Major type 2:
-: a byte string. The string's length in bytes is represented following
-  the rules for positive integers (major type 0).  For example, a byte
-  string whose length is 5 would have an initial byte of 0b010_00101
-  (major type 2, additional information 5 for the length), followed by
-  5 bytes of binary content. A byte string whose length is 500 would
-  have 3 initial bytes of 0b010_11001 (major type 2, additional
-  information 25 to indicate a two-byte length) followed by the two
-  bytes 0x01f4 for a length of 500, followed by 500 bytes of binary
-  content.
+: a byte string.  The unsigned integer is the number of bytes in the
+  string.  For example, a byte string whose length is 5 would have an
+  initial byte of 0b010_00101 (major type 2, additional information 5
+  for the length), followed by 5 bytes of binary content.  A byte
+  string whose length is 500 would have 3 initial bytes of 0b010_11001
+  (major type 2, additional information 25 to indicate a two-byte
+  length) followed by the two bytes 0x01f4 for a length of 500,
+  followed by 500 bytes of binary content.
 
 Major type 3:
-: a text string, specifically a string of Unicode characters that is
-  encoded as UTF-8 {{RFC3629}}.  The format of this type is identical
-  to that of byte strings (major type 2), that is, as with major type
-  2, the length gives the number of bytes.  This type is provided for
-  systems that need to interpret or display human-readable text, and
-  allows the differentiation between unstructured bytes and text that
-  has a specified repertoire and encoding.  In contrast to formats
-  such as JSON, the Unicode characters in this type are never
-  escaped. Thus, a newline character (U+000A) is always represented in
-  a string as the byte 0x0a, and never as the bytes 0x5c6e (the
-  characters "\\" and "n") or as 0x5c7530303061 (the characters "\\",
-  "u", "0", "0", "0", and "a").
+: a text string ({{cbor-data-models}}), encoded as UTF-8 ({{RFC3629}}).
+  The unsigned integer is the number of bytes in the string.  A string
+  containing an invalid UTF-8 sequence is well-formed but invalid.
+  This type is provided for systems that need to interpret or display
+  human-readable text, and allows the differentiation between
+  unstructured bytes and text that has a specified repertoire and
+  encoding.  In contrast to formats such as JSON, the Unicode
+  characters in this type are never escaped. Thus, a newline character
+  (U+000A) is always represented in a string as the byte 0x0a, and
+  never as the bytes 0x5c6e (the characters "\\" and "n") or as
+  0x5c7530303061 (the characters "\\", "u", "0", "0", "0", and "a").
 
 Major type 4:
 : an array of data items.  Arrays are also called lists, sequences, or
-  tuples.  The array's length follows the rules for byte strings
-  (major type 2), except that the length denotes the number of data
-  items, not the length in bytes that the array takes up.  Items in an
-  array do not need to all be of the same type.  For example, an array
-  that contains 10 items of any type would have an initial byte of
-  0b100_01010 (major type of 4, additional information of 10 for the
-  length) followed by the 10 remaining items.
+  tuples.  The unsigned integer is the number of data items in the
+  array.  Items in an array do not need to all be of the same type.
+  For example, an array that contains 10 items of any type would have
+  an initial byte of 0b100_01010 (major type of 4, additional
+  information of 10 for the length) followed by the 10 remaining
+  items.
 
 Major type 5:
 : a map of pairs of data items. Maps are also called tables,
   dictionaries, hashes, or objects (in JSON).  A map is comprised of
   pairs of data items, each pair consisting of a key that is
-  immediately followed by a value.  The map's length follows the rules
-  for byte strings (major type 2), except that the length denotes the
-  number of pairs, not the length in bytes that the map takes up.  For
-  example, a map that contains 9 pairs would have an initial byte of
-  0b101_01001 (major type of 5, additional information of 9 for the
-  number of pairs) followed by the 18 remaining items. The first item
-  is the first key, the second item is the first value, the third item
-  is the second key, and so on.  A map that has duplicate keys may be
-  well-formed, but it is not valid, and thus it causes indeterminate
-  decoding; see also {{map-keys}}.
+  immediately followed by a value.  The unsigned integer is the number
+  of *pairs* of data items in the map.  For example, a map that
+  contains 9 pairs would have an initial byte of 0b101_01001 (major
+  type of 5, additional information of 9 for the number of pairs)
+  followed by the 18 remaining items. The first item is the first key,
+  the second item is the first value, the third item is the second
+  key, and so on.  A map that has duplicate keys may be well-formed,
+  but it is not valid, and thus it causes indeterminate decoding; see
+  also {{map-keys}}.
 
 Major type 6:
-: optional semantic tagging of other major types. See {{tags}}.
+: a tagged data item whose tag is the unsigned integer and whose value
+  is the single following encoded item.  See {{tags}}.
 
 Major type 7:
-: floating-point numbers and simple data types that need no content,
-  as well as the "break" stop code. See {{fpnocont}}.
+: floating-point numbers and simple values, as well as the "break"
+  stop code.  See {{fpnocont}}.
 
 
 These eight major types lead to a simple table showing which of the
@@ -514,30 +530,30 @@ referred to as "streaming" within a data item.)
 Indefinite-length arrays and maps are dealt with differently than
 indefinite-length byte strings and text strings.
 
+### The "break" stop code {#break}
+
+The "break" stop code is encoded with major type 7 and additional
+information value 31 (0b111_11111). It is not itself a data item: it
+is just a syntactic feature to close an indefinite-length item.
+
+If the "break" stop code appears where an item is expected, for
+example directly inside a definite-length array or map, the enclosing
+item is ill-formed.
+
 ### Indefinite-Length Arrays and Maps
 
-Indefinite-length arrays and maps are simply opened without indicating
-the number of data items that will be included in the array or map,
-using the additional information value of 31. The initial major type
-and additional information byte is followed by the elements of the
-array or map, just as they would be in other arrays or maps. The end
-of the array or map is indicated by encoding a "break" stop code in a
-place where the next data item would normally have been included.  The
-"break" is encoded with major type 7 and additional information value
-31 (0b111_11111) but is not itself a data item: it is just a syntactic
-feature to close the array or map.  That is, the "break" stop code
-comes after the last item in the array or map, and it cannot occur
-anywhere else in place of a data item. In this way, indefinite-length
-arrays and maps look identical to other arrays and maps except for
-beginning with the additional information value 31 and ending with the
-"break" stop code.
+Indefinite-length arrays and maps are represented using their major
+type with the additional information value of 31, followed by an
+arbitrary-length sequence of items for an array or key/value pairs for
+a map, followed by the "break" stop code ({{break}}).
 
-Arrays and maps with indefinite lengths allow any number of items (for
-arrays) and key/value pairs (for maps) to be given before the "break"
-stop code.  There is no restriction against nesting indefinite-length
-array or map items.  A "break" only terminates a single item, so
-nested indefinite-length items need exactly as many "break" stop codes
-as there are type bytes starting an indefinite-length item.
+If the break stop code appears after a key in a map, in place of that
+key's value, the map is ill-formed.
+
+There is no restriction against nesting indefinite-length array or map
+items.  A "break" only terminates a single item, so nested
+indefinite-length items need exactly as many "break" stop codes as
+there are type bytes starting an indefinite-length item.
 
 For example, assume an encoder wants to represent the abstract array
 \[1, \[2, 3], \[4, 5]].  The definite-length encoding would be
@@ -630,26 +646,15 @@ BF           -- Start indefinite-length map
 
 ### Indefinite-Length Byte Strings and Text Strings
 
-Indefinite-length byte strings and text strings are actually a
-concatenation of zero or more definite-length byte or text strings
-("chunks") that are together treated as one contiguous
-string. Indefinite-length strings are opened with the major type and
-additional information value of 31, but what follows are a series of
-byte or text strings that have definite lengths (the chunks). The end
-of the series of chunks is indicated by encoding the "break" stop code
-(0b111_11111) in a place where the next chunk in the series would
-occur. The contents of the chunks are concatenated together, and the
-overall length of the indefinite-length string will be the sum of the
-lengths of all of the chunks.  In summary, an indefinite-length string
-is encoded similarly to how an indefinite-length array of its chunks
-would be encoded, except that the major type of the indefinite-length
-string is that of a (text or byte) string and matches the major types
-of its chunks.
+Indefinite-length strings consist of a byte containing the major type
+and additional information value of 31, followed by a series of byte
+or text strings ("chunks") that have definite lengths, followed by the
+"break" stop code ({{break}}).  The data item represented by the
+indefinite-length string is the concatenation of the chunks.
 
-For indefinite-length byte strings, every data item (chunk) between
-the indefinite-length indicator and the "break" MUST be a
-definite-length byte string item; if the parser sees any item type
-other than a byte string before it sees the "break", it is an error.
+If any item between the indefinite-length byte string indicator
+(0b010_11111) and the "break" is not a definite-length byte string
+item, the byte string is ill-formed.
 
 For example, assume the sequence:
 
@@ -667,11 +672,12 @@ For example, assume the sequence:
 After decoding, this results in a single byte string with seven bytes:
 0xaabbccddeeff99.
 
-Text strings with indefinite lengths act the same as byte strings with
-indefinite lengths, except that all their chunks MUST be
-definite-length text strings.  Note that this implies that the bytes
-of a single UTF-8 character cannot be spread between chunks: a new
-chunk can only be started at a character boundary.
+If any item between the indefinite-length text string indicator
+(0b011_11111) and the "break" is not a definite-length text string
+item, the text string is ill-formed. If any of these items is invalid,
+the indefinite-length text string is invalid.  Note that this implies
+that the bytes of a single UTF-8 character cannot be spread between
+chunks: a new chunk can only be started at a character boundary.
 
 
 ## Floating-Point Numbers and Values with No Content {#fpnocont}
@@ -683,24 +689,27 @@ meaning, as defined in {{fpnoconttbl}}.  Like the major types for
 integers, items of this major type do not carry content data; all the
 information is in the initial bytes.
 
-| 5-Bit Value | Semantics                                        |
-|-------------+--------------------------------------------------|
-|       0..23 | Simple value (value 0..23)                       |
-|          24 | Simple value (value 32..255 in following byte)   |
-|          25 | IEEE 754 Half-Precision Float (16 bits follow)   |
-|          26 | IEEE 754 Single-Precision Float (32 bits follow) |
-|          27 | IEEE 754 Double-Precision Float (64 bits follow) |
-|       28-30 | (Unassigned)                                     |
-|          31 | "break" stop code for indefinite-length items    |
+| 5-Bit Value | Semantics                                                 |
+|-------------+-----------------------------------------------------------|
+|       0..23 | Simple value (value 0..23)                                |
+|          24 | Simple value (value 32..255 in following byte)            |
+|          25 | IEEE 754 Half-Precision Float (16 bits follow)            |
+|          26 | IEEE 754 Single-Precision Float (32 bits follow)          |
+|          27 | IEEE 754 Double-Precision Float (64 bits follow)          |
+|       28-30 | Ill-formed                                                |
+|          31 | "break" stop code for indefinite-length items ({{break}}) |
 {: #fpnoconttbl title='Values for Additional Information in Major Type 7'}
 
 As with all other major types, the 5-bit value 24 signifies a
 single-byte extension: it is followed by an additional byte to
-represent the simple value. (To minimize confusion, only the values 32
-to 255 are used.)  This maintains the structure of the initial bytes:
-as for the other major types, the length of these always depends on
-the additional information in the first byte. {{fpnoconttbl2}} lists
-the values assigned and available for simple types.
+represent the simple value.  This maintains the structure of the
+initial bytes: as for the other major types, the length of these
+always depends on the additional information in the first byte.  If a
+value between 0..31 inclusive appears in this additional byte, the
+item is ill-formed.
+
+{{fpnoconttbl2}} lists the values assigned and available for simple
+types.
 
 |   Value | Semantics       |
 |---------+-----------------|
@@ -713,12 +722,7 @@ the values assigned and available for simple types.
 | 32..255 | (Unassigned)    |
 {: #fpnoconttbl2 title='Simple Values'}
 
-The 5-bit values of 25, 26, and 27 are for 16-bit, 32-bit, and 64-bit
-IEEE 754 binary floating-point values.  These floating-point values
-are encoded in the additional bytes of the appropriate size.  (See
-{{half-precision}} for some information about 16-bit floating point.)
-
-An encoder
+Specifically, an encoder
 MUST NOT encode False as the two-byte sequence of 0xf814,
 MUST NOT encode True as the two-byte sequence of 0xf815,
 MUST NOT encode Null as the two-byte sequence of 0xf816, and
@@ -726,18 +730,22 @@ MUST NOT encode Undefined value as the two-byte sequence of 0xf817.
 A decoder MUST treat these two-byte sequences as an error.
 Similar prohibitions apply to the unassigned simple values as well.
 
+The 5-bit values of 25, 26, and 27 are for 16-bit, 32-bit, and 64-bit
+IEEE 754 binary floating-point values.  These floating-point values
+are encoded in the additional bytes of the appropriate size.  (See
+{{half-precision}} for some information about 16-bit floating point.)
+
 ## Optional Tagging of Items {#tags}
 
 In CBOR, a data item can optionally be preceded by a tag to give it
 additional semantics while retaining its structure. The tag is major
 type 6, and represents an integer number as indicated by the tag's
-integer value; the (sole) data item is carried as content data.  If a
-tag requires structured data, this structure is encoded into the
-nested data item.  The definition of a tag usually restricts what
-kinds of nested data item or items can be carried by a tag.
+unsigned integer ({{specification-of-the-cbor-encoding}}); the (sole)
+data item is carried as content data.  If a tag requires structured
+data, this structure is encoded into the nested data item.  The
+definition of a tag usually restricts what kinds of nested data item
+or items are valid.
 
-The initial bytes of the tag follow the rules for positive integers
-(major type 0). The tag is followed by a single data item of any type.
 For example, assume that a byte string of length 12 is marked with a
 tag to indicate it is a positive bignum ({{bignums}}).  This would be
 marked as 0b110_00010 (major type 6, additional information 2 for the
@@ -757,10 +765,7 @@ tag and interpret the tagged data item itself.
 
 A tag always applies to the item that is directly followed by it.
 Thus, if tag A is followed by tag B, which is followed by data item C,
-tag A applies to the result of applying tag B on data item C.  That
-is, a tagged item is a data item consisting of a tag and a value.  The
-content of the tagged item is the data item (the value) that is being
-tagged.
+tag A applies to the result of applying tag B on data item C.
 
 IANA maintains a registry of tag values as described in {{ianatags}}.
 {{tagvalues}} provides a list of initial values, with definitions in
@@ -795,18 +800,21 @@ the rest of this section.
 Protocols using tag values 0 and 1 extend the generic data model
 ({{cbor-data-models}}) with data items representing points in time.
 
-Tag value 0 is for date/time strings that follow the standard format
-described in {{RFC3339}}, as refined by Section 3.3 of {{RFC4287}}.
+Tag value 0 contains a text string in the standard format described in
+{{RFC3339}}, as refined by Section 3.3 of {{RFC4287}}, representing
+the point in time described there. A nested item of another type or
+that doesn't match the {{RFC4287}} format is invalid.
 
-Tag value 1 is for numerical representation of seconds relative to
-1970-01-01T00:00Z in UTC time.  (For the non-negative values that the
-Portable Operating System Interface (POSIX) defines, the number of
-seconds is counted in the same way as for POSIX "seconds since the
-epoch" {{TIME_T}}.)  The tagged item can be a positive or negative
-integer (major types 0 and 1), or a floating-point number (major type
-7 with additional information 25, 26, or 27). Note that the number can
-be negative (time before 1970-01-01T00:00Z) and, if a floating-point
-number, indicate fractional seconds.
+Tag value 1 contains a numerical value counting the number of seconds
+from 1970-01-01T00:00Z in UTC time to the represented point in time.
+The number can be negative (time before 1970-01-01T00:00Z) and, if a
+floating-point number, indicate fractional seconds. (For the
+non-negative values that the Portable Operating System Interface
+(POSIX) defines, the number of seconds is counted in the same way as
+for POSIX "seconds since the epoch" {{TIME_T}}.)  The tagged item can
+be a positive or negative integer (major types 0 and 1), or a
+floating-point number (major type 7 with additional information 25,
+26, or 27).  Other contained types are invalid.
 
 
 ### Bignums {#bignums}
@@ -818,10 +826,11 @@ integers from the basic data model, but specific data models can
 define that equivalence.
 
 Bignums are encoded as a byte string data item, which is interpreted
-as an unsigned integer n in network byte order.  For tag value 2, the
-value of the bignum is n.  For tag value 3, the value of the bignum is
--1 - n.  Decoders that understand these tags MUST be able to decode
-bignums that have leading zeroes.
+as an unsigned integer n in network byte order.  Contained items of
+other types are invalid.  For tag value 2, the value of the bignum is
+n.  For tag value 3, the value of the bignum is -1 - n.  Decoders that
+understand these tags MUST be able to decode bignums that have leading
+zeroes.
 
 For example, the number 18446744073709551616 (2\*\*64) is represented
 as 0b110_00010 (major type 6, tag 2), followed by 0b010_01001 (major
@@ -864,7 +873,8 @@ Decimal fractions (tag 4) use base-10 exponents; the value of a
 decimal fraction data item is m\*(10\*\*e).  Bigfloats (tag 5) use
 base-2 exponents; the value of a bigfloat data item is m\*(2\*\*e).
 The exponent e MUST be represented in an integer of major type 0 or 1,
-while the mantissa also can be a bignum ({{bignums}}).
+while the mantissa also can be a bignum ({{bignums}}).  Contained
+items with other structures are invalid.
 
 An example of a decimal fraction is that the number 273.15 could be
 represented as 0b110_00100 (major type of 6 for the tag, additional
@@ -920,7 +930,9 @@ data model.
 Sometimes it is beneficial to carry an embedded CBOR data item that is
 not meant to be decoded immediately at the time the enclosing data
 item is being parsed.  Tag 24 (CBOR data item) can be used to tag the
-embedded byte string as a data item encoded in CBOR format.
+embedded byte string as a data item encoded in CBOR format.  Contained
+items that aren't byte strings are invalid.  Any contained byte string
+is valid, even if it encodes an invalid or ill-formed CBOR item.
 
 
 #### Expected Later Encoding for CBOR-to-JSON Converters {#convexpect}
@@ -954,18 +966,30 @@ ways to encode binary data in strings.
 Some text strings hold data that have formats widely used on the
 Internet, and sometimes those formats can be validated and presented
 to the application in appropriate form by the decoder. There are tags
-for some of these formats.
+for some of these formats. As with tags 21 to 23, if these tags are
+applied to an item other than a text string, they apply to all text
+string data items it contains.
 
-* Tag 32 is for URIs, as defined in {{RFC3986}};
+* Tag 32 is for URIs, as defined in {{RFC3986}}.  If the text string
+  doesn't match the `URI-reference` production, the string is invalid.
 
 * Tags 33 and 34 are for base64url- and base64-encoded text strings,
-  as defined in {{RFC4648}};
+  as defined in {{RFC4648}}.  If any of:
+  * the encoded text string contains non-alphabet characters or only 1
+    character in the last block of 4, or
+  * the padding bits in a 2- or 3-character block are not 0, or
+  * the base64 encoding has the wrong number of padding characters, or
+  * the base64url encoding has padding characters,
+
+  the string is invalid.
 
 * Tag 35 is for regular expressions in Perl Compatible Regular
-  Expressions (PCRE) / JavaScript syntax {{ECMA262}}.
+  Expressions (PCRE) / JavaScript syntax {{ECMA262}}.  A text string
+  that isn't a valid regular expression is invalid.
 
 * Tag 36 is for MIME messages (including all headers), as defined in
-  {{RFC2045}};
+  {{RFC2045}}. A text string that isn't a valid MIME message is
+  invalid.
 
 Note that tags 33 and 34 differ from 21 and 22 in that the data is
 transported in base-encoded form for the former and in raw byte string
@@ -1082,7 +1106,9 @@ subsequent values are zero or more floating-point numbers" or "the
 item is a map that has byte strings for keys and contains at least one
 pair whose key is 0xab01".
 
-This specification puts no restrictions on CBOR-based protocols. An
+CBOR-based protocols MUST specify how their decoders handle
+ill-formed, invalid, and other unexpected data.  CBOR-based protocols
+MAY specify that they treat arbitrary valid data as unexpected.  An
 encoder can be capable of encoding as many or as few types of values
 as is required by the protocol in which it is used; a decoder can be
 capable of understanding as many or as few types of values as is
@@ -1091,9 +1117,7 @@ restrictions allows CBOR to be used in extremely constrained
 environments.
 
 This section discusses some considerations in creating CBOR-based
-protocols.  It is advisory only and explicitly excludes any language
-from RFC 2119 other than words that could be interpreted as "MAY" in
-the sense of RFC 2119.
+protocols.
 
 ## CBOR in Streaming Applications
 
@@ -1121,24 +1145,20 @@ applications but not others.
 ## Generic Encoders and Decoders {#generic}
 
 A generic CBOR decoder can decode all well-formed CBOR data and
-present them to an application.  CBOR data is well-formed if it uses
-the initial bytes, as well as the byte strings and/or data items that
-are implied by their values, in the manner defined by CBOR, and no
-extraneous data follows ({{pseudocode}}).
+present them to an application.  See {{pseudocode}}.
 
 Even though CBOR attempts to minimize these cases, not all well-formed
-CBOR data is valid: for example, the format excludes simple values
-below 32 that are encoded with an extension byte.  Also, specific tags
-may make semantic constraints that may be violated, such as by
-including a tag in a bignum tag or by following a byte string within a
-date tag.  Finally, the data may be invalid, such as invalid UTF-8
-strings or date strings that do not conform to {{RFC3339}}.  There is
-no requirement that generic encoders and decoders make unnatural
-choices for their application interface to enable the processing of
-invalid data.  Generic encoders and decoders are expected to forward
-simple values and tags even if their specific codepoints are not
-registered at the time the encoder/decoder is written
-({{unknown-tags}}).
+CBOR data is valid: for example, the text string `0x62c0ae` is not
+valid UTF-8 and so not a valid CBOR item.  Also, specific tags may
+make semantic constraints that may be violated, such as a bignum tag
+containing another tag, or a date tag containing a byte string or a
+text string with contents that don't match {{RFC3339}}'s `date-time`
+production.  There is no requirement that generic encoders and
+decoders make unnatural choices for their application interface to
+enable the processing of invalid data.  Generic encoders and decoders
+are expected to forward simple values and tags even if their specific
+codepoints are not registered at the time the encoder/decoder is
+written ({{unknown-tags}}).
 
 Generic decoders provide ways to present well-formed CBOR values, both
 valid and invalid, to an application.  The diagnostic notation
@@ -1152,73 +1172,45 @@ and tags unknown to the encoder.
 
 ## Syntax Errors
 
-A decoder encountering a CBOR data item that is not well-formed
-generally can choose to completely fail the decoding (issue an error
-and/or stop processing altogether), substitute the problematic data
-and data items using a decoder-specific convention that clearly
-indicates there has been a problem, or take some other action.
+A decoder encountering a CBOR data item that is ill-formed generally
+can choose to completely fail the decoding (issue an error and stop
+processing). Sometimes (e.g. a map key followed immediately by the
+"break" stop code) it is possible to replace or skip the ill-formed
+data and continue parsing. In other cases (e.g. an array with
+additional information 28), it can be impossible to know how much data
+to skip.
+
+CBOR-based protocols that choose to return partial data or to continue
+after finding ill-formed data MUST describe exactly which kinds of
+ill-formed data they can recover from, how they recover, and how they
+determine where to restart parsing.
 
 ### Incomplete CBOR Data Items
 
 The representation of a CBOR data item has a specific length,
 determined by its initial bytes and by the structure of any data items
-enclosed in the data items.  If less data is available, this can be
-treated as a syntax error.  A decoder may also implement incremental
-parsing, that is, decode the data item as far as it is available and
-present the data found so far (such as in an event-based interface),
-with the option of continuing the decoding once further data is
-available.
-
-Examples of incomplete data items include:
-
-* A decoder expects a certain number of array or map entries but
-  instead encounters the end of the data.
-
-* A decoder processes what it expects to be the last pair in a map and
-  comes to the end of the data.
-
-* A decoder has just seen a tag and then encounters the end of the
-  data.
-
-* A decoder has seen the beginning of an indefinite-length item but
-  encounters the end of the data before it sees the "break" stop code.
-
-
-
-### Malformed Indefinite-Length Items
-
-Examples of malformed indefinite-length data items include:
-
-* Within an indefinite-length byte string or text, a decoder finds an
-  item that is not of the appropriate major type before it finds the
-  "break" stop code.
-
-* Within an indefinite-length map, a decoder encounters the "break"
-  stop code immediately after reading a key (the value is missing).
-
-Another error is finding a "break" stop code at a point in the data
-where there is no immediately enclosing (unclosed) indefinite-length
-item.
-
-
-### Unknown Additional Information Values
-
-At the time of writing, some additional information values are
-unassigned and reserved for future versions of this document (see
-{{curating}}).  Since the overall syntax for these additional
-information values is not yet defined, a decoder that sees an
-additional information value that it does not understand cannot
-continue parsing.
+enclosed in the data items.  If less data is available, a
+non-streaming decoder ({{cbor-in-streaming-applications}}) SHOULD
+return no data at all.
 
 
 ## Other Decoding Errors {#semantic-errors}
 
-A CBOR data item may be syntactically well-formed but present a
-problem with interpreting the data encoded in it in the CBOR data
-model.  Generally speaking, a decoder that finds a data item with such
-a problem might issue a warning, might stop processing altogether,
-might handle the error and make the problematic value available to the
-application as such, or take some other type of action.
+A well-formed but invalid CBOR data item presents a problem with
+interpreting the data encoded in it in the CBOR data model.  A
+CBOR-based protocol could be specified in several layers, in which the
+lower layers don't process the semantics of some of the CBOR data they
+forward.  These layers can't notice the invalidity in data they don't
+process and MUST forward that data as-is.  The first layer that does
+process the semantics of an invalid CBOR item MUST take one of two
+choices:
+
+1. Replace the problematic item with an error marker and continue with
+   the next item, or
+1. Issue an error and stop processing altogether.
+
+A CBOR-based protocol MUST specify which of these options its decoders
+take, for each kind of invalid item they might encounter.
 
 Such problems might include:
 
@@ -1270,14 +1262,6 @@ item only to the application, or take some other type of action.
 
 ## Numbers {#numbers}
 
-An application or protocol that uses CBOR might restrict the
-representations of numbers.  For instance, a protocol that only deals
-with integers might say that floating-point numbers may not be used
-and that decoders of that protocol do not need to be able to handle
-floating-point numbers. Similarly, a protocol or application that uses
-CBOR might say that decoders need to be able to handle either type of
-number.
-
 CBOR-based protocols should take into account that different language
 environments pose different restrictions on the range and precision of
 numbers that are representable.  For example, the JavaScript number
@@ -1319,10 +1303,8 @@ If multiple types of keys are to be used, consideration should be
 given to how these types would be represented in the specific
 programming environments that are to be used.  For example, in
 JavaScript objects, a key of integer 1 cannot be distinguished from a
-key of string "1".  This means that, if integer keys are used, the
-simultaneous use of string keys that look like numbers needs to be
-avoided. Again, this leads to the conclusion that keys should be of a
-single CBOR type.
+key of string "1", so if both need to appear, JavaScript Maps should
+be used instead.
 
 Decoders that deliver data items nested within a CBOR data item
 immediately on decoding them ("streaming decoders") often do not keep
@@ -1332,22 +1314,20 @@ enclosing data item is completely available ("streaming encoder") may
 want to reduce its overhead significantly by relying on its data
 source to maintain uniqueness.
 
-A CBOR-based protocol should make an intentional decision about what
-to do when a receiving application does see multiple identical keys in
-a map.  The resulting rule in the protocol should respect the CBOR
-data model: it cannot prescribe a specific handling of the entries
-with the identical keys, except that it might have a rule that having
-identical keys in a map indicates a malformed map and that the decoder
-has to stop with an error. Duplicate keys are also prohibited by CBOR
-decoders that are using strict mode ({{strict-mode}}).
+A CBOR-based protocol MUST make an intentional decision about what to
+do when a receiving application does see multiple identical keys in a
+map.  The resulting rule in the protocol could specify that the value
+of the first or last duplicate key is used, that the entire map is
+replaced by an error value, or that the decoder must stop with an
+error.  CBOR decoders that are using strict mode ({{strict-mode}})
+choose the last of these options.
 
 The CBOR data model for maps does not allow ascribing semantics to the
-order of the key/value pairs in the map representation.
-Thus, it would be a very bad practice to define a CBOR-based protocol
-in such a way that changing the key/value pair order in a map would
-change the semantics, apart from trivial aspects (cache usage, etc.).
-(A CBOR-based protocol can prescribe a specific order of
-serialization, such as for canonicalization.)
+order of the key/value pairs in the map representation.  Thus, a
+CBOR-based protocol MUST NOT specify that changing the key/value pair
+order in a map would change the semantics, apart from trivial aspects
+(cache usage, etc.).  (A CBOR-based protocol can prescribe a specific
+order of serialization, such as for canonicalization.)
 
 Applications for constrained devices that have maps with 24 or fewer
 frequently used keys should consider using small integers (and those
@@ -1546,11 +1526,11 @@ decode in strict mode.
 
 A decoder in strict mode will reliably reject any data that could be
 interpreted by other decoders in different ways.  It will reliably
-reject data items with syntax errors ({{syntax-errors}}).  It will
-also expend the effort to reliably detect other decoding errors
-({{semantic-errors}}). In particular, a strict decoder needs to have
-an API that reports an error (and does not return data) for a CBOR
-data item that contains any of the following:
+reject ill-formed data items ({{syntax-errors}}).  It will also expend
+the effort to reliably detect invalid data items
+({{semantic-errors}}). For example, a strict decoder needs to have an
+API that reports an error (and does not return data) for a CBOR data
+item that contains any of the following:
 
 * a map (major type 5) that has more than one entry with the same key
 
